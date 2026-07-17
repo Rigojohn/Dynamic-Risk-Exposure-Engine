@@ -1,7 +1,7 @@
 # Dynamic Risk Exposure Engine
 
 > A machine learning and quantitative finance project for dynamic equity exposure management under realistic trading constraints.
-
+ 
 ## Overview
 
 This project develops a risk-aware trading research framework that uses machine learning probabilities to dynamically adjust equity market exposure.
