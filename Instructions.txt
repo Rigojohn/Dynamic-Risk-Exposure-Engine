@@ -1,0 +1,41 @@
+PROJECT USAGE INSTRUCTIONS
+
+1. Extract the project
+Extract the project archive to a folder of your choice.
+No hardcoded user path is required. The notebook must run from inside the extracted project folder.
+
+2. Open the notebook
+Open the file:
+Trading_Oriented_MachineLearning_Project.ipynb
+
+Recommended environment:
+- Python 3.11 or Python 3.12, 64-bit
+- Jupyter Notebook, JupyterLab, or VS Code with the Jupyter extension
+
+If package compatibility issues occur, avoid Python 3.13.
+
+3. Kernel and execution folder
+Select a kernel with Python 3.11 or 3.12.
+Make sure the notebook runs from the extracted project folder. The notebook looks for generate_presentation.py in the current folder and in direct child folders.
+
+4. Install dependencies
+At the start of the notebook there is a core install cell.
+If the internet is offline or slow, set USE_LIVE_SENTIMENT=False.
+transformers/torch are not required. FinBERT is optional: uncomment/run the optional install cell and set USE_FINBERT=True.
+SEC is best-effort and returns neutral features if unavailable.
+If a kernel restart is requested after installation, restart and continue from the beginning.
+
+5. Select ticker
+In the ticker cell, select the stock symbol you want to analyze.
+To find the correct ticker, use Yahoo Finance lookup: https://finance.yahoo.com/lookup/
+Use Yahoo Finance format, for example:
+- AAPL
+- MSFT
+- TSLA
+- SPY
+- ^GSPC
+
+6. Run
+After selecting the ticker and installing packages, choose Run All.
+An internet connection is required because the notebook downloads market data and news.
+After Run All, the presentation is written to presentation_outputs/ml_model_presentation_latest.html. If it does not open automatically, open the HTML manually.
