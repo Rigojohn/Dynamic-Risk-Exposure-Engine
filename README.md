@@ -6,6 +6,32 @@
 
 ---
 
+<details>
+<summary><strong>Table of Contents</strong></summary>
+
+- [Abstract](#abstract)
+- [1. Introduction and Research Objective](#1-introduction-and-research-objective)
+- [2. System Architecture](#2-system-architecture)
+- [3. Data and Market Context](#3-data-and-market-context)
+- [4. Feature Engineering](#4-feature-engineering)
+- [5. Target Construction and Chronological Split](#5-target-construction-and-chronological-split)
+- [6. Machine Learning Models](#6-machine-learning-models)
+- [7. Dynamic Exposure Engine](#7-dynamic-exposure-engine)
+- [8. Walk-Forward Model Selection and Validation-Safe Tuning](#8-walk-forward-model-selection-and-validation-safe-tuning)
+- [9. Validation Discipline](#9-validation-discipline)
+- [10. Purged, Embargoed Validation](#10-purged-embargoed-validation)
+- [11. Interpretability](#11-interpretability)
+- [12. Empirical Results](#12-empirical-results)
+- [13. Evaluation Metrics](#13-evaluation-metrics)
+- [14. Limitations and Disclaimer](#14-limitations-and-disclaimer)
+- [15. Reproducibility](#15-reproducibility)
+- [16. Extensibility to Other Instruments](#16-extensibility-to-other-instruments)
+- [17. Scaling to Cryptocurrency Markets](#17-scaling-to-cryptocurrency-markets)
+- [18. Live Interactive Report](#18-live-interactive-report)
+- [Tech Stack](#tech-stack)
+
+</details>
+
 ## Abstract
 
 This work presents a validation-disciplined machine learning framework that converts probabilistic estimates of favorable market regimes into a deterministic, risk-controlled equity exposure policy. Rather than forecasting price levels or issuing binary buy/sell signals, an XGBoost classifier estimates `P(y_t = 1 | X_t)` — the probability that a forward-looking, weighted open-to-open return exceeds a train-derived threshold — and a separate, non-learned exposure engine maps this probability, together with point-in-time trend, volatility, drawdown and sentiment state, into a target position. The framework is **asset-agnostic**: it accepts any sufficiently liquid stock, ETF or index ticker, is evaluated walk-forward, and is benchmarked against buy-and-hold on out-of-sample, cost-adjusted, risk-first metrics (Sharpe ratio, Calmar ratio, maximum drawdown, turnover) for that asset. The same probability-to-exposure architecture extends naturally to other continuously-traded instruments, including cryptocurrency markets (Section 17). The central research question is whether this probability-to-exposure pipeline improves the *risk-adjusted* profile of a passive holding, rather than raw return alone.
@@ -111,26 +137,22 @@ A subtle but critical detail: `lower_threshold` and `upper_threshold` are comput
 | Final model | Train + validation only |
 | Final metrics | Held-out test only, never used for tuning |
 
-## 10. Recommended Extension: Purged Walk-Forward Validation
+## 10. Purged, Embargoed Validation
 
-The walk-forward protocol in Section 8 already restricts thresholds and tuning to train-only information at each fold. However, because labels are built from a **blended 3-day/5-day/10-day forward return** (Section 5), every row's label depends on price information up to 10 trading days *ahead* of that row. This creates **label overlap** at every fold boundary — and at the main train/validation/test boundaries — even though the split itself is strictly chronological: a training row just before a cut can share realized-return information with the first evaluation rows after it. This is a well-known, subtle leakage channel in financial machine learning (López de Prado, *Advances in Financial Machine Learning*, 2018), and purging is the standard remedy.
+Because labels are built from a **blended 3-day/5-day/10-day forward return** (Section 5), each row's label depends on price information up to 10 trading days *ahead* of that row. In a naive walk-forward setup, this creates label overlap at split/fold boundaries — a well-known leakage channel in financial machine learning (López de Prado, *Advances in Financial Machine Learning*, 2018). The codebase already guards against this in two places:
 
-**Purging.** Before evaluating any fold or split boundary, drop training observations whose label horizon `[t, t+H]` overlaps the evaluation block's time range, where `H` is the maximum label horizon in use (10 trading days here, matching the 3/5/10-day blend). This removes exactly the training rows near a boundary that would otherwise leak forward information into evaluation.
+- **Implicit purge at every split/fold boundary.** `add_future_return_target()` is applied *after* the data is sliced into `train_df_raw`, `val_df_raw`, `test_df_raw` (Section 5) and, inside the walk-forward loop (Section 8), after slicing each fold's `train_raw_fold`. Because the forward-return `shift()` is computed strictly within that already-sliced frame, the trailing rows whose horizon would reach past the split/fold end become `NaN` and are dropped by `.dropna(subset=["future_return"])` — exactly the rows a manual purge would remove, sized automatically to the label horizon.
+- **Explicit purged, embargoed CV inside Optuna tuning.** The hyperparameter search objective uses `TimeSeriesSplit(n_splits=3, gap=20)`, which inserts a 20-trading-day gap between each internal train fold and its validation fold — comfortably larger than the 10-day maximum label horizon, so it purges label overlap *and* adds embargo margin against short-horizon serial correlation, exactly as López de Prado prescribes.
 
-**Embargo.** After purging, add a further buffer of a few trading days *after* each evaluation block before its data becomes eligible for training again, to also absorb serial correlation in features and model predictions that purging alone does not fully remove.
+So the walk-forward *model-selection* loop (Section 8) and the 60/20/20 split are already leakage-safe against the label-overlap pattern by construction, and the Optuna search additionally uses a formal purged/embargoed CV scheme.
 
-**How it extends the current design:**
+**What is not yet explicit** is that the split/fold purge width is an emergent side-effect of `dropna()`, rather than a named, documented parameter — it works today because the drop happens to match the label horizon, but it is easy to silently break (e.g. if a longer horizon is added to `horizons`/`horizon_weights` without revisiting this logic) or to lose track of when reasoning about the code later. The walk-forward loop (Section 8) also has no explicit *embargo* beyond the incidental gap left by the dropped rows — unlike the Optuna CV's deliberate `gap=20`.
 
-- Apply purge + embargo at every walk-forward fold boundary (Section 8), in addition to the existing train-only threshold and tuning discipline (Section 9).
-- Apply the same purge logic at the main 60/20/20 train/validation/test boundaries (Section 5), not only at walk-forward folds.
-- Practical starting parameters: purge width = `H = 10` trading days; embargo width = a small fixed buffer (e.g. 1–5 trading days) or ~1% of the evaluation block size, as a tunable setting.
+**Recommended tightening:**
 
-**Why this matters for scaling further:**
-
-- It tightens the "no lookahead bias" guarantee that Section 9 already emphasizes — the more assets, tickers and overlapping-horizon targets the framework is run across (including a 24/7 crypto calendar per Section 17, which has no session gaps to naturally separate folds), the more fold boundaries exist, and purging removes the leakage risk at each one systematically rather than case by case.
-- It reduces optimistic bias in the Sharpe/Calmar estimates used for candidate and hyperparameter selection (Section 8, Optuna search), which matters more as the number of assets and search trials grows — with more trials, it becomes easier to "discover" a configuration that only looks good because of boundary leakage.
-- It is a natural stepping stone to **Combinatorial Purged Cross-Validation (CPCV)**: generating multiple purged train/test path combinations from the same data to estimate a **Probability of Backtest Overfitting (PBO)**. This becomes directly useful once the framework is evaluated across many tickers and many tuning trials, where the odds of selecting an overfit configuration purely by chance increase with scale.
-- Implementation cost is modest: purge/embargo logic is a filter on training indices at fold-construction time — it does not require changes to the classifier, the exposure engine, or the metrics layer.
+- Make the purge explicit: define `PURGE_DAYS = max(horizons.values())` once, and use it — rather than relying on `dropna()` behavior — anywhere a train/evaluation boundary is constructed, so the guarantee stays correct even if the label horizons change.
+- Add a small explicit embargo (a few trading days, or match the Optuna CV's `gap=20`) after each walk-forward evaluation block, for consistency with the tuning stage.
+- As the framework is run across more assets and more Optuna trials (Section 17 on crypto adds a 24/7 calendar with no natural session gaps), consider **Combinatorial Purged Cross-Validation (CPCV)** — generating multiple purged train/test path combinations to estimate a **Probability of Backtest Overfitting (PBO)** — since the odds of selecting a configuration that looks good by chance grow with the number of assets and trials evaluated.
 
 ## 11. Interpretability
 
