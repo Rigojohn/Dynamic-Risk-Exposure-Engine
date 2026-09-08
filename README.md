@@ -1,7 +1,9 @@
 # Dynamic Risk Exposure Engine
 
 > A machine learning and quantitative finance project for dynamic equity exposure management under realistic trading constraints.
- 
+
+**📊 [View the live interactive report](https://rigojohn.github.io/Dynamic-Risk-Exposure-Engine/)** — full Plotly dashboard with Abstract, Architecture, Features, SHAP interpretability, candlestick chart, walk-forward validation and metrics. *(Link goes live once GitHub Pages is enabled — see "Live Interactive Report" section below.)*
+
 ## Overview
 
 This project develops a risk-aware trading research framework that uses machine learning probabilities to dynamically adjust equity market exposure.
@@ -62,6 +64,22 @@ Main evaluation metrics include:
 - Maximum Drawdown
 - Turnover
 - Win Rate
+
+## Live Interactive Report
+
+Running the notebook (`Run All`) regenerates `presentation_outputs/ml_model_presentation_latest.html` — a self-contained, interactive Plotly report (SHAP charts, candlestick chart, walk-forward metrics, etc.).
+
+GitHub does **not** execute JavaScript when you open an `.html` file inside the repo file browser — it only shows the raw source. To view the report as a real, interactive page, publish it with **GitHub Pages** (free, static hosting, one-time setup):
+
+1. Push/upload this repo to GitHub (including `index.html` at the repo root and the `presentation_outputs/` folder).
+2. On GitHub, go to **Settings → Pages**.
+3. Under **Build and deployment → Source**, choose **Deploy from a branch**.
+4. Branch: `main`, folder: `/ (root)` → **Save**.
+5. After a minute, GitHub shows the live URL:
+   `https://rigojohn.github.io/Dynamic-Risk-Exposure-Engine/`
+   The root `index.html` automatically redirects to the latest report.
+
+Whenever you regenerate the report (new ticker / re-run), just push the updated `presentation_outputs/ml_model_presentation_latest.html` — the same live URL will always show the latest version.
 
 ## Disclaimer
 
