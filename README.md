@@ -8,7 +8,7 @@
 
 ## Abstract
 
-This work presents a validation-disciplined machine learning framework that converts probabilistic estimates of favorable market regimes into a deterministic, risk-controlled equity exposure policy. Rather than forecasting price levels or issuing binary buy/sell signals, an XGBoost classifier estimates $P(y_t = 1 \mid X_t)$ — the probability that a forward-looking, weighted open-to-open return exceeds a train-derived threshold — and a separate, non-learned exposure engine maps this probability, together with point-in-time trend, volatility, drawdown and sentiment state, into a target position. The framework is **asset-agnostic**: it accepts any sufficiently liquid stock, ETF or index ticker, is evaluated walk-forward, and is benchmarked against buy-and-hold on out-of-sample, cost-adjusted, risk-first metrics (Sharpe ratio, Calmar ratio, maximum drawdown, turnover) for that asset. The same probability-to-exposure architecture extends naturally to other continuously-traded instruments, including cryptocurrency markets (Section 17). The central research question is whether this probability-to-exposure pipeline improves the *risk-adjusted* profile of a passive holding, rather than raw return alone.
+This work presents a validation-disciplined machine learning framework that converts probabilistic estimates of favorable market regimes into a deterministic, risk-controlled equity exposure policy. Rather than forecasting price levels or issuing binary buy/sell signals, an XGBoost classifier estimates `P(y_t = 1 | X_t)` — the probability that a forward-looking, weighted open-to-open return exceeds a train-derived threshold — and a separate, non-learned exposure engine maps this probability, together with point-in-time trend, volatility, drawdown and sentiment state, into a target position. The framework is **asset-agnostic**: it accepts any sufficiently liquid stock, ETF or index ticker, is evaluated walk-forward, and is benchmarked against buy-and-hold on out-of-sample, cost-adjusted, risk-first metrics (Sharpe ratio, Calmar ratio, maximum drawdown, turnover) for that asset. The same probability-to-exposure architecture extends naturally to other continuously-traded instruments, including cryptocurrency markets (Section 17). The central research question is whether this probability-to-exposure pipeline improves the *risk-adjusted* profile of a passive holding, rather than raw return alone.
 
 ## 1. Introduction and Research Objective
 
@@ -16,9 +16,11 @@ This work presents a validation-disciplined machine learning framework that conv
 
 The classifier does not predict price or daily return directly. It estimates
 
-$$\text{risk\_on\_proba} = P(y_t = 1 \mid X_t)$$
+```
+risk_on_proba = P(y_t = 1 | X_t)
+```
 
-where $y_t$ is a binary label for a favorable future-return regime, defined from a weighted blend of forward open-to-open returns exceeding a threshold derived strictly from training data. The exposure engine then converts this probability into `target_position` using trend, volatility, drawdown, sentiment and risk controls. An execution/backtest layer applies a one-row execution delay, a no-trade (rebalance) band, transaction costs, cash yield on unallocated capital, and financing costs for leverage above 1.0, before comparing against buy-and-hold under identical timing and cost assumptions.
+where `y_t` is a binary label for a favorable future-return regime, defined from a weighted blend of forward open-to-open returns exceeding a threshold derived strictly from training data. The exposure engine then converts this probability into `target_position` using trend, volatility, drawdown, sentiment and risk controls. An execution/backtest layer applies a one-row execution delay, a no-trade (rebalance) band, transaction costs, cash yield on unallocated capital, and financing costs for leverage above 1.0, before comparing against buy-and-hold under identical timing and cost assumptions.
 
 **Evaluation philosophy.** Assessment is risk-first: emphasis is placed on the Sharpe/Calmar edge over buy-and-hold, drawdown reduction, volatility, turnover and transaction costs — not on maximizing raw return in isolation.
 
@@ -31,7 +33,7 @@ The system is deliberately separated into three stages — **prediction**, **exp
 1. **Data / context** — daily OHLCV with a warm-up history window, cross-market variables, real-news sentiment, and SEC filing/event context for the selected asset.
 2. **Point-in-time features** — technical, volatility, volume, trend, sentiment and event features aligned to the after-close signal time; news and filing inputs are shifted one trading row.
 3. **Chronological split and labels** — train/validation/test order is preserved in time; labels use weighted forward open-to-open returns and thresholds derived only from the allowed training window.
-4. **Probability models** — a weighted XGBoost baseline and an Optuna-tuned candidate estimate $\text{risk\_on\_proba} = P(y_t = 1 \mid X_t)$. The output is a probability, never a trade.
+4. **Probability models** — a weighted XGBoost baseline and an Optuna-tuned candidate estimate `risk_on_proba = P(y_t = 1 | X_t)`. The output is a probability, never a trade.
 5. **Validation / walk-forward selection** — candidates are compared across walk-forward folds; exposure, sentiment and risk settings are selected on validation using train-only probabilities and locked before the final test.
 6. **Final test and metrics** — the selected probability path and locked engine settings are evaluated once on the held-out test window.
 
@@ -46,7 +48,7 @@ Primary prices (daily OHLCV) are sourced via Yahoo Finance (`yfinance`) for the 
 
 ## 4. Feature Engineering
 
-Features are constructed to be strictly point-in-time: the model observes information available **after** the market close at time $t$, builds the feature row for that close, and the exposure engine executes at the **next** market open. Sentiment and filing/event inputs are shifted by one trading row so that same-day news or filings are never treated as tradable information for that row; no-news / no-filing periods remain neutral rather than being coerced into an artificial positive or negative signal.
+Features are constructed to be strictly point-in-time: the model observes information available **after** the market close at time `t`, builds the feature row for that close, and the exposure engine executes at the **next** market open. Sentiment and filing/event inputs are shifted by one trading row so that same-day news or filings are never treated as tradable information for that row; no-news / no-filing periods remain neutral rather than being coerced into an artificial positive or negative signal.
 
 Feature families include trend and momentum (multi-horizon returns/momentum), volatility and stress (`atr_14_pct`, `bb_width_pct`, `bb_position`, `volatility_5d/20d/60d`, `volatility_ratio_5_20`, `volatility_ratio_20_60`, `drawdown_20d/60d`, `overnight_gap`, `gap_volatility_20d`), liquidity/volume, cross-market regime, sentiment, and filing/event context.
 
@@ -58,23 +60,30 @@ The feature table `df_ta` is split chronologically into train (earliest 60%), va
 
 ## 6. Machine Learning Models
 
-For each trading day $t$, the model receives a feature vector $X_t$ built from the technical, volatility, volume, cross-market, sentiment and event variables above, and learns from the binary label $y_t \in \{0,1\}$ constructed in Section 5. The output is
+For each trading day `t`, the model receives a feature vector `X_t` built from the technical, volatility, volume, cross-market, sentiment and event variables above, and learns from the binary label `y_t ∈ {0,1}` constructed in Section 5. The output is
 
-$$\text{risk\_on\_proba} = P(y_t = 1 \mid X_t)$$
+```
+risk_on_proba = P(y_t = 1 | X_t)
+```
 
 **Model family.** XGBoost — an additive ensemble of decision trees, where the raw score is the sum of individual tree contributions:
 
-$$\text{score}(X_t) = \sum_k f_k(X_t)$$
+```
+score(X_t) = sum_k f_k(X_t)
+```
 
 This raw score is mapped to a probability via a sigmoid link. Two candidates are compared: a **weighted XGBoost baseline** and an **Optuna-tuned** variant (TPE sampler, 50 trials) that jointly searches XGBoost hyperparameters and a compact set of trading/exposure parameters (`decision_threshold`, `low_exposure`, `high_exposure`, `risk_off_exposure`, `risk_on_boost`, `rebalance_threshold`, `fast_vol_threshold`). The tuned candidate is treated as a *candidate*, never an automatic replacement for the baseline.
 
 ## 7. Dynamic Exposure Engine
 
-The exposure engine is **not** a second machine learning model — it is a fixed, deterministic set of portfolio rules. Given a candidate probability $p_t$, point-in-time market state $Z_t$, and a locked parameter set $\theta$, it outputs the desired `target_position`, the realized position after execution delay, net returns, equity curves, drawdowns and final metrics:
+The exposure engine is **not** a second machine learning model — it is a fixed, deterministic set of portfolio rules. Given a candidate probability `p_t`, point-in-time market state `Z_t`, and a locked parameter set `θ`, it outputs the desired `target_position`, the realized position after execution delay, net returns, equity curves, drawdowns and final metrics:
 
-$$p_t^{(W)} \xrightarrow{\text{engine}} \text{metrics}^{(W)} \qquad\qquad p_t^{(O)} \xrightarrow{\text{engine}} \text{metrics}^{(O)}$$
+```
+p_t^(W)  --engine-->  metrics^(W)
+p_t^(O)  --engine-->  metrics^(O)
+```
 
-Because both the weighted-baseline path $p_t^{(W)}$ and the Optuna-tuned path $p_t^{(O)}$ are passed through the *identical* engine and execution rules, the comparison isolates the effect of the probability signal itself. The engine incorporates:
+Because both the weighted-baseline path `p_t^(W)` and the Optuna-tuned path `p_t^(O)` are passed through the *identical* engine and execution rules, the comparison isolates the effect of the probability signal itself. The engine incorporates:
 
 - Risk-on / risk-off regime switching
 - Volatility- and drawdown-based exposure controls
@@ -106,7 +115,7 @@ A subtle but critical detail: `lower_threshold` and `upper_threshold` are comput
 
 The walk-forward protocol in Section 8 already restricts thresholds and tuning to train-only information at each fold. However, because labels are built from a **blended 3-day/5-day/10-day forward return** (Section 5), every row's label depends on price information up to 10 trading days *ahead* of that row. This creates **label overlap** at every fold boundary — and at the main train/validation/test boundaries — even though the split itself is strictly chronological: a training row just before a cut can share realized-return information with the first evaluation rows after it. This is a well-known, subtle leakage channel in financial machine learning (López de Prado, *Advances in Financial Machine Learning*, 2018), and purging is the standard remedy.
 
-**Purging.** Before evaluating any fold or split boundary, drop training observations whose label horizon $[t,\, t+H]$ overlaps the evaluation block's time range, where $H$ is the maximum label horizon in use (10 trading days here, matching the 3/5/10-day blend). This removes exactly the training rows near a boundary that would otherwise leak forward information into evaluation.
+**Purging.** Before evaluating any fold or split boundary, drop training observations whose label horizon `[t, t+H]` overlaps the evaluation block's time range, where `H` is the maximum label horizon in use (10 trading days here, matching the 3/5/10-day blend). This removes exactly the training rows near a boundary that would otherwise leak forward information into evaluation.
 
 **Embargo.** After purging, add a further buffer of a few trading days *after* each evaluation block before its data becomes eligible for training again, to also absorb serial correlation in features and model predictions that purging alone does not fully remove.
 
@@ -114,7 +123,7 @@ The walk-forward protocol in Section 8 already restricts thresholds and tuning t
 
 - Apply purge + embargo at every walk-forward fold boundary (Section 8), in addition to the existing train-only threshold and tuning discipline (Section 9).
 - Apply the same purge logic at the main 60/20/20 train/validation/test boundaries (Section 5), not only at walk-forward folds.
-- Practical starting parameters: purge width = $H = 10$ trading days; embargo width = a small fixed buffer (e.g. 1–5 trading days) or ~1% of the evaluation block size, as a tunable setting.
+- Practical starting parameters: purge width = `H = 10` trading days; embargo width = a small fixed buffer (e.g. 1–5 trading days) or ~1% of the evaluation block size, as a tunable setting.
 
 **Why this matters for scaling further:**
 
